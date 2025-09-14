@@ -14,7 +14,7 @@ type ChatMessage = {
   timestamp?: string | number | null;
 };
 
-export default function Home() {
+export default function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [username] = useState("Guest" + Math.floor(Math.random() * 100));
