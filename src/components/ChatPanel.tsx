@@ -34,6 +34,13 @@ export default function ChatPanel() {
   const [rooms, setRooms] = useState<string[]>(roomArray);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Clear all caches function
+  const clearCache = () => {
+    setRoomCache({});
+    localStorage.removeItem("chat-cache");
+  };
+
+
   // load username (persist)
   useEffect(() => {
     const storedName = localStorage.getItem("chat-username");
@@ -235,6 +242,9 @@ export default function ChatPanel() {
               <span>{messages.length}</span>
             </div>
             <ThemeToggle />
+              <Button onClick={clearCache} variant="destructive" >
+                Clear Chat
+              </Button>
           </div>
         </CardHeader>
 
