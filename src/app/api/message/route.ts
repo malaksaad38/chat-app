@@ -10,11 +10,13 @@ const pusher = new Pusher({
 });
 
 export async function POST(req: Request) {
-  const { username, message } = await req.json();
+  const { username, message, room } = await req.json();
 
-  await pusher.trigger("chat-channel", "new-message", {
+  await pusher.trigger(`chat-${room}`, "new-message", {
     username,
     message,
+    room,
+    timestamp: new Date().toISOString(),
   });
 
   return NextResponse.json({ success: true });
