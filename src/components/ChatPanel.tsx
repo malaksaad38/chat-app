@@ -9,16 +9,14 @@ import {
   Send,
   User,
   Clock,
-  MessagesSquare,
   Trash2,
   ChevronLeft,
-  Search,
   Plus,
-  MoreVertical,
   Smile,
   Paperclip,
   Mic,
   CheckCheck,
+  Edit3, User2Icon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -33,6 +31,7 @@ import {
 type ChatMessage = {
   id?: string;
   clientId?: string;
+  userId?: string; // Unique identifier for the sender
   username: string;
   message: string;
   timestamp?: string | number | null;
@@ -43,8 +42,12 @@ const INITIAL_ROOMS = ["General", "Random", "Tech"];
 const MESSAGE_LIMIT = 100;
 const DUPLICATE_WINDOW_MS = 5000;
 
+/** Generate unique IDs */
 function generateClientId() {
   return `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+function generateUserId() {
+  return `u-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function formatTime(ts?: string | number | null) {
@@ -55,49 +58,69 @@ function formatTime(ts?: string | number | null) {
     : "";
 }
 
-export default function WhatsAppChat() {
+export function ChatPanel() {
   const [roomCache, setRoomCache] = useState<Record<string, ChatMessage[]>>({});
   const [input, setInput] = useState("");
   const [username, setUsername] = useState("");
   const [usernameInput, setUsernameInput] = useState("");
+  const [userId, setUserId] = useState<string>("");
   const [showDialog, setShowDialog] = useState(false);
   const [currentRoom, setCurrentRoom] = useState("General");
   const [rooms, setRooms] = useState<string[]>(INITIAL_ROOMS);
   const [showSidebar, setShowSidebar] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false); // Dialog open state
+  const [newRoomName, setNewRoomName] = useState(""); // Input value
 
-  /** Clear all cached messages */
-  const clearCache = () => {
-    setRoomCache({});
-    localStorage.removeItem("chat-cache");
+  /** --- LocalStorage Helpers --- */
+  const storageKey = (room: string) => `chat-cache-${room}`;
+
+  const loadRoomCache = (room: string) => {
+    const stored = localStorage.getItem(storageKey(room));
+    return stored ? JSON.parse(stored) : [];
   };
 
-  /** Load username */
+  const saveRoomCache = (room: string, messages: ChatMessage[]) => {
+    localStorage.setItem(storageKey(room), JSON.stringify(messages));
+  };
+
+  /** Clear current room's cache */
+  const clearCache = () => {
+    setRoomCache((prev) => ({ ...prev, [currentRoom]: [] }));
+    localStorage.removeItem(storageKey(currentRoom));
+  };
+
+  /** --- Load Username and UserID --- */
   useEffect(() => {
+    // Load or generate a persistent userId
+    let storedId = localStorage.getItem("chat-user-id");
+    if (!storedId) {
+      storedId = generateUserId();
+      localStorage.setItem("chat-user-id", storedId);
+    }
+    setUserId(storedId);
+
+    // Load username
     const storedName = localStorage.getItem("chat-username");
     if (storedName) {
       setUsername(storedName);
     } else {
-      setShowDialog(true);
+      setShowDialog(true); // Ask for username if not set
     }
   }, []);
 
-  /** Load cached messages */
+  /** Load messages for the initial room */
   useEffect(() => {
-    const stored = localStorage.getItem("chat-cache");
-    if (stored) {
-      try {
-        setRoomCache(JSON.parse(stored));
-      } catch {
-        console.warn("Invalid cache data in localStorage");
-      }
-    }
-  }, []);
+    const initialMessages = loadRoomCache(currentRoom);
+    setRoomCache((prev) => ({ ...prev, [currentRoom]: initialMessages }));
+  }, [currentRoom]);
 
-  /** Persist cache whenever roomCache changes */
+  /** Persist current room messages whenever they change */
   useEffect(() => {
-    localStorage.setItem("chat-cache", JSON.stringify(roomCache));
-  }, [roomCache]);
+    if (roomCache[currentRoom]) {
+      saveRoomCache(currentRoom, roomCache[currentRoom]);
+    }
+  }, [roomCache, currentRoom]);
 
   const messages = roomCache[currentRoom] || [];
 
@@ -118,7 +141,7 @@ export default function WhatsAppChat() {
       // Prevent duplicate by ID
       if (msg.id && roomMsgs.some((m) => m.id === msg.id)) return prev;
 
-      // Fuzzy duplicate detection by username + message + timestamp window
+      // Fuzzy duplicate detection
       const existsFuzzy = roomMsgs.some((m) => {
         if (m.username !== msg.username || m.message !== msg.message) return false;
         const t1 = m.timestamp ? new Date(m.timestamp).getTime() : NaN;
@@ -132,7 +155,7 @@ export default function WhatsAppChat() {
     });
   };
 
-  /** Pusher real-time subscription */
+  /** --- Pusher Subscription --- */
   useEffect(() => {
     const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
@@ -143,6 +166,7 @@ export default function WhatsAppChat() {
       const incoming: ChatMessage = {
         id: data?.id,
         clientId: data?.clientId,
+        userId: data?.userId,
         username: data?.username ?? "Unknown",
         message: data?.message ?? "",
         timestamp: data?.timestamp ?? new Date().toISOString(),
@@ -159,18 +183,19 @@ export default function WhatsAppChat() {
     };
   }, [currentRoom]);
 
-  /** Auto-scroll to bottom when messages update */
+  /** --- Auto-scroll on message update --- */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  /** Send message */
+  /** --- Send Message --- */
   const sendMessage = async () => {
     if (!input.trim()) return;
 
     const clientId = generateClientId();
     const optimistic: ChatMessage = {
       clientId,
+      userId,
       username,
       message: input,
       timestamp: new Date().toISOString(),
@@ -195,6 +220,7 @@ export default function WhatsAppChat() {
         const normalized: ChatMessage = {
           id: serverMsg?.id,
           clientId: serverMsg?.clientId ?? clientId,
+          userId: serverMsg?.userId ?? userId,
           username: serverMsg?.username ?? username,
           message: serverMsg?.message ?? optimistic.message,
           timestamp: serverMsg?.timestamp ?? new Date().toISOString(),
@@ -220,21 +246,63 @@ export default function WhatsAppChat() {
     setInput("");
   };
 
-  /** Switch room */
+  /** --- Room Switching --- */
   const handleRoomChange = (room: string) => {
     setCurrentRoom(room);
-    setShowSidebar(false); // Close sidebar on mobile
+    setShowSidebar(false); // close sidebar on mobile
     if (!rooms.includes(room)) {
       setRooms((prev) => [...prev, room]);
     }
+
+    // Load messages for the new room if not already loaded
+    if (!roomCache[room]) {
+      const loadedMessages = loadRoomCache(room);
+      setRoomCache((prev) => ({ ...prev, [room]: loadedMessages }));
+    }
   };
 
-  /** Save username */
+  /** --- Username Dialog --- */
   const handleUsernameSubmit = () => {
     if (usernameInput.trim()) {
-      setUsername(usernameInput.trim());
-      localStorage.setItem("chat-username", usernameInput.trim());
+      const newName = usernameInput.trim();
+
+      setUsername(newName);
+      localStorage.setItem("chat-username", newName);
       setShowDialog(false);
+
+      // Update all messages in memory for this user
+      setRoomCache((prev) => {
+        const updated = { ...prev };
+        for (const room in updated) {
+          updated[room] = updated[room].map((msg) =>
+            msg.userId === userId ? { ...msg, username: newName } : msg
+          );
+        }
+        return updated;
+      });
+
+      // Optional system notification
+      if (username && newName !== username) {
+        const systemMsg: ChatMessage = {
+          username: "System",
+          message: `${username} changed their name to ${newName}`,
+          timestamp: new Date().toISOString(),
+        };
+        upsertRoomMessage(systemMsg);
+      }
+    }
+  };
+
+  const openUsernameDialog = () => {
+    setUsernameInput(username);
+    setShowDialog(true);
+  };
+
+  const handleAddRoom = () => {
+    if (newRoomName.trim() && !rooms.includes(newRoomName.trim())) {
+      setRooms((prev) => [...prev, newRoomName.trim()]);
+      setNewRoomName("");
+      setOpen(false);
     }
   };
 
@@ -245,10 +313,12 @@ export default function WhatsAppChat() {
         <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-center">
-              Welcome 👋
+              {username ? "Update Username" : "Welcome 👋"}
             </DialogTitle>
             <p className="text-sm text-muted-foreground text-center">
-              Choose a username to join the chat
+              {username
+                ? "Change your username below"
+                : "Choose a username to join the chat"}
             </p>
           </DialogHeader>
           <Input
@@ -295,15 +365,33 @@ export default function WhatsAppChat() {
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => {
-                const newRoom = prompt("Enter new room name:");
-                if (newRoom && !rooms.includes(newRoom)) {
-                  setRooms((prev) => [...prev, newRoom]);
-                }
-              }}
+              onClick={() => setOpen(true)}
             >
               <Plus className="w-5 h-5" />
             </Button>
+
+            {/* Dialog */}
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create New Room</DialogTitle>
+                </DialogHeader>
+
+                {/* Input for new room name */}
+                <Input
+                  placeholder="Enter room name"
+                  value={newRoomName}
+                  onChange={(e) => setNewRoomName(e.target.value)}
+                />
+
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleAddRoom}>Create</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
@@ -321,18 +409,26 @@ export default function WhatsAppChat() {
           {roomCache[room]?.[roomCache[room].length - 1]?.message ||
             "No messages yet"}
         </span>
-
-              {/* Unread Badge */}
-              {room !== currentRoom &&
-                roomCache[room] &&
-                roomCache[room].length > 0 && (
-                  <span className="absolute top-3 right-3 text-xs bg-green-500 text-white rounded-full px-2 py-0.5">
-              {roomCache[room].length}
-            </span>
-                )}
             </div>
           ))}
         </div>
+
+        {/* Simple User Profile (Username Only) */}
+        <div className="border-t p-4 bg-gray-100 dark:bg-gray-900">
+          <div className="flex items-center justify-between font-semibold text-gray-800 dark:text-gray-100">
+            {/* Left Side: Icon + Username */}
+            <div className="flex items-center gap-2">
+              <User2Icon />
+              <span>{username}</span>
+            </div>
+
+            {/* Right Side: Edit Button */}
+            <Button size="icon" variant="ghost" onClick={openUsernameDialog}>
+              <Edit3 className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+
       </div>
 
 
@@ -354,12 +450,6 @@ export default function WhatsAppChat() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button size="icon" variant="ghost">
-              <Search className="w-5 h-5" />
-            </Button>
-            <Button size="icon" variant="ghost">
-              <MoreVertical className="w-5 h-5" />
-            </Button>
             <Button onClick={clearCache} size="icon" variant="ghost">
               <Trash2 className="w-5 h-5 text-red-500" />
             </Button>
@@ -375,7 +465,7 @@ export default function WhatsAppChat() {
           ) : (
             <AnimatePresence>
               {messages.map((msg, i) => {
-                const mine = msg.username === username;
+                const mine = msg.userId === userId;
                 return (
                   <motion.div
                     key={msg.clientId ?? msg.id ?? i}
@@ -394,12 +484,19 @@ export default function WhatsAppChat() {
                       }`}
                     >
                       <div className="text-sm whitespace-pre-wrap break-words">
+                        {!mine && (
+                          <span className="text-blue-600">{msg.username}</span>
+                        )}
+                      </div>
+                      <div className="text-sm whitespace-pre-wrap break-words">
                         {msg.message}
                       </div>
 
                       {/* Time + Status */}
                       <div className="flex items-center justify-end gap-1 mt-1 opacity-80">
-                        <span className="text-[10px]">{formatTime(msg.timestamp)}</span>
+                        <span className="text-[10px]">
+                          {formatTime(msg.timestamp)}
+                        </span>
                         {mine &&
                           (msg.local ? (
                             <Clock className="w-3 h-3" />

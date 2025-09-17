@@ -1,4 +1,4 @@
-import ChatPanel from "@/components/ChatPanel";
+import {ChatPanel} from "@/components/ChatPanel";
 
 export default function Home() {
   return (
