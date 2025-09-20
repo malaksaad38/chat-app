@@ -19,6 +19,7 @@ import {
   Edit3, User2Icon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import EmojiPicker from "emoji-picker-react";
 
 import {
   Dialog,
@@ -27,6 +28,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {useTheme} from "next-themes";
 
 type ChatMessage = {
   id?: string;
@@ -41,6 +43,7 @@ type ChatMessage = {
 const INITIAL_ROOMS = ["General", "Random", "Tech"];
 const MESSAGE_LIMIT = 100;
 const DUPLICATE_WINDOW_MS = 5000;
+
 
 /** Generate unique IDs */
 function generateClientId() {
@@ -72,8 +75,11 @@ export function ChatPanel() {
   const [open, setOpen] = useState(false); // Dialog open state
   const [newRoomName, setNewRoomName] = useState(""); // Input value
   const [openC, setOpenC] = useState(false);
+  const {theme} = useTheme()
 
-
+  // Emoji dialog state and input ref
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   /** --- LocalStorage Helpers --- */
   const storageKey = (room: string) => `chat-cache-${room}`;
@@ -310,8 +316,18 @@ export function ChatPanel() {
   };
   const handleConfirm = () => {
     clearCache();
-    setOpen(false); // close dialog after confirmation
+    setOpenC(false); // close dialog after confirmation
   };
+
+  // Emoji selection handler
+  const handleEmojiSelect = (emojiData: any) => {
+    // emojiData.emoji contains the selected character
+    setInput((prev) => prev + (emojiData?.emoji ?? ""));
+    setEmojiOpen(false);
+    // focus input after selecting
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
   return (
     <div className="flex w-full h-screen bg-gray-100 dark:bg-gray-900">
       {/* Username Dialog */}
@@ -334,6 +350,15 @@ export function ChatPanel() {
             onKeyDown={(e) => e.key === "Enter" && handleUsernameSubmit()}
           />
           <DialogFooter>
+            <Button
+              variant={"outline"}
+              onClick={()=> {
+                setShowDialog(false)
+              }}
+              disabled={!usernameInput.trim()}
+            >
+              Cancel
+            </Button>
             <Button
               onClick={handleUsernameSubmit}
               disabled={!usernameInput.trim()}
@@ -466,7 +491,7 @@ export function ChatPanel() {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Clear Cache?</DialogTitle>
-
+                  <p>Are you sure to clear the chat</p>
                 </DialogHeader>
 
                 <DialogFooter className="flex justify-end gap-2">
@@ -474,10 +499,10 @@ export function ChatPanel() {
                     Cancel
                   </Button>
                   <Button
-                    variant={"default"}
+                    variant={"destructive"}
                     onClick={handleConfirm}
                   >
-                    Yes, Clear
+                    Clear
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -544,37 +569,41 @@ export function ChatPanel() {
 
         {/* Input Section */}
         <div className="flex items-center gap-2 p-3 border-t bg-gray-100 dark:bg-gray-800">
-          <Button size="icon" variant="ghost">
+          <Button size="icon" variant="ghost" onClick={() => setEmojiOpen(true)}>
             <Smile className="w-5 h-5" />
           </Button>
 
-          <Button size="icon" variant="ghost">
-            <Paperclip className="w-5 h-5" />
-          </Button>
-
           <Input
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             placeholder={`Message ${currentRoom}`}
             className="flex-1 rounded-full px-4"
           />
+          <Button
+            onClick={sendMessage}
+            size="icon"
+            className="rounded-full bg-green-500 hover:bg-green-600 text-white"
+          >
+            <Send className="w-5 h-5" />
+          </Button>
 
-          {input.trim() ? (
-            <Button
-              onClick={sendMessage}
-              size="icon"
-              className="rounded-full bg-green-500 hover:bg-green-600 text-white"
-            >
-              <Send className="w-5 h-5" />
-            </Button>
-          ) : (
-            <Button size="icon" variant="ghost">
-              <Mic className="w-5 h-5" />
-            </Button>
-          )}
         </div>
       </div>
+
+      {/* Emoji Dialog */}
+      <Dialog open={emojiOpen} onOpenChange={setEmojiOpen}>
+        <DialogContent className="p-0 w-auto rounded-full" showCloseButton={false}>
+            <EmojiPicker
+              onEmojiClick={handleEmojiSelect}
+              theme={theme === "dark" ? "dark" : "light"} // Dynamically adapts to theme
+              skinTonesDisabled
+              lazyLoadEmojis
+            />
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
