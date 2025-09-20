@@ -71,6 +71,9 @@ export function ChatPanel() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false); // Dialog open state
   const [newRoomName, setNewRoomName] = useState(""); // Input value
+  const [openC, setOpenC] = useState(false);
+
+
 
   /** --- LocalStorage Helpers --- */
   const storageKey = (room: string) => `chat-cache-${room}`;
@@ -305,7 +308,10 @@ export function ChatPanel() {
       setOpen(false);
     }
   };
-
+  const handleConfirm = () => {
+    clearCache();
+    setOpen(false); // close dialog after confirmation
+  };
   return (
     <div className="flex w-full h-screen bg-gray-100 dark:bg-gray-900">
       {/* Username Dialog */}
@@ -449,10 +455,33 @@ export function ChatPanel() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button onClick={clearCache} size="icon" variant="ghost">
+          <div>
+            {/* Trigger Button */}
+            <Button onClick={() => setOpenC(true)} size="icon" variant="ghost">
               <Trash2 className="w-5 h-5 text-red-500" />
             </Button>
+
+            {/* Confirmation Dialog */}
+            <Dialog open={openC} onOpenChange={setOpenC}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Clear Cache?</DialogTitle>
+
+                </DialogHeader>
+
+                <DialogFooter className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setOpenC(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant={"default"}
+                    onClick={handleConfirm}
+                  >
+                    Yes, Clear
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
