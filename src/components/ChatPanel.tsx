@@ -1,5 +1,6 @@
 "use client";
 
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { useEffect, useState, useRef } from "react";
 import Pusher from "pusher-js";
 import { motion, AnimatePresence } from "framer-motion";
@@ -363,7 +364,7 @@ export function ChatPanel() {
               onClick={handleUsernameSubmit}
               disabled={!usernameInput.trim()}
             >
-              Save
+              Update
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -569,10 +570,31 @@ export function ChatPanel() {
 
         {/* Input Section */}
         <div className="flex items-center gap-2 p-3 border-t bg-gray-100 dark:bg-gray-800">
-          <Button size="icon" variant="ghost" onClick={() => setEmojiOpen(true)}>
-            <Smile className="w-5 h-5" />
-          </Button>
+          <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
+            {/* Trigger Button */}
+            <PopoverTrigger asChild>
+              <Button size="icon" variant="ghost">
+                <Smile className="w-5 h-5" />
+              </Button>
+            </PopoverTrigger>
 
+            {/* Emoji Picker */}
+            <PopoverContent
+              className="p-0 w-auto border-none shadow-lg"
+              align="end"
+              side="top"
+            >
+              <EmojiPicker
+                onEmojiClick={(emoji) => {
+                  handleEmojiSelect(emoji);
+                  setEmojiOpen(false); // Close after selecting an emoji
+                }}
+                theme={theme === "dark" ? "dark" : "light"}
+                skinTonesDisabled
+                lazyLoadEmojis
+              />
+            </PopoverContent>
+          </Popover>
           <Input
             ref={inputRef}
             value={input}
@@ -593,16 +615,7 @@ export function ChatPanel() {
       </div>
 
       {/* Emoji Dialog */}
-      <Dialog open={emojiOpen} onOpenChange={setEmojiOpen}>
-        <DialogContent className="p-0 w-auto rounded-full" showCloseButton={false}>
-            <EmojiPicker
-              onEmojiClick={handleEmojiSelect}
-              theme={theme === "dark" ? "dark" : "light"} // Dynamically adapts to theme
-              skinTonesDisabled
-              lazyLoadEmojis
-            />
-        </DialogContent>
-      </Dialog>
+
 
     </div>
   );
